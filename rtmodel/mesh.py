@@ -6,6 +6,7 @@ import numpy as np
 from OpenGL.GL import *
 import bunch
 import bisect
+import offscreen
 
 
 meshes = [os.path.split(os.path.splitext(_)[0])[1]
@@ -21,6 +22,20 @@ class Mesh(object):
         self.faces = faces
         self.scale = scale
         self.obj = obj
+
+
+    def range_render(self, KK=None, RT=None):
+        with offscreen.render() as d:            
+            glMatrixMode(GL_PROJECTION)
+            glLoadIdentity()
+            if KK is not None: glMultMatrixf(KK.transpose())
+            glMatrixMode(GL_MODELVIEW)
+            glLoadIdentity()
+            if RT is not None: glMultMatrixf(RT.transpose())
+
+            self.draw()
+            self.depth, self.color = d()
+        return self.depth, self.color
 
 
     def draw(self):
@@ -67,6 +82,7 @@ class Mesh(object):
         reverse area integral
         """
         sample = np.empty((num,3), dtype='f')
+        norm = np.empty((num,3), dtype='f')
         if not 'area' in self.__dict__:
             self.calculate_area_lookup()
         rnds = np.random.rand(num) * self.area.total
@@ -74,19 +90,23 @@ class Mesh(object):
         coords = np.random.rand(num,2).astype('f')
         for i, ind, (r1,r2) in zip(range(num), inds, coords):
             v1,v2,v3 = self.vertices[self.faces[ind,:3],:3]
-            if r1+r2 >= 1:
-                r1 = 1-r1
+            if r1+r2 >= 1: r1,r2 = 1-r1,1-r2
             point = v1 + (v2-v1)*r1 + (v3-v1)*r2
             sample[i,:] = point
-        return sample
+
+            normal = np.cross(v2-v1,v3-v1)
+            normal /= np.sqrt(np.dot(normal,normal))
+            norm[i,:] = normal
+            
+        return sample, norm
 
 
 def load_random():
     import random
-     return load(random.choice(meshes))
+    return load(random.choice(meshes))
+ 
 
-
-def load(meshname, do_scale=False):
+def load(meshname, do_scale=True):
     if meshname in ('teapot', 'bunny69k', 'blueghost'):
         do_scale = True
 
