@@ -1,8 +1,9 @@
 import numpy as np
+import calibkinect
 
 class Camera(object):
 
-    def __init__(self, KK, RT):
+    def __init__(self, KK, RT=np.eye(4, dtype='f')):
         """
         Args:
             KK: 4x4 numpy matrix ('f')
@@ -15,5 +16,4 @@ class Camera(object):
 
 
 def kinect_camera():
-    pass
-
+    return Camera(calibkinect.projection())

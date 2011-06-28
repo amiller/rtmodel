@@ -7,6 +7,8 @@ from OpenGL.GL import *
 import bunch
 import bisect
 import offscreen
+import rangeimage
+import pointmodel
 
 
 meshes = [os.path.split(os.path.splitext(_)[0])[1]
@@ -17,30 +19,29 @@ class Mesh(object):
     """ Representation of a 3D object as a triangle mesh.
         Numpy arrays for vertices and faces are easily used with opengl.
     """
-    def __init__(self, vertices, faces, obj=None, scale=1.0):
+    def __init__(self, vertices, faces, obj=None, RT=np.eye(4,dtype='f'), scale=1.0):
         self.vertices = vertices
         self.faces = faces
         self.scale = scale
         self.obj = obj
+        self.RT = RT
 
 
-    def range_render(self, KK=None, RT=None):
+    def range_render(self, camera):
         with offscreen.render() as d:            
-            glMatrixMode(GL_PROJECTION)
-            glLoadIdentity()
-            if KK is not None: glMultMatrixf(KK.transpose())
             glMatrixMode(GL_MODELVIEW)
             glLoadIdentity()
-            if RT is not None: glMultMatrixf(RT.transpose())
-
+            glMultMatrixf(camera.KK.transpose())
+            glMultMatrixf(camera.RT.transpose())
             self.draw()
-            self.depth, self.color = d()
-        return self.depth, self.color
+            depth, _ = d()
+        return rangeimage.RangeImage(depth, camera)
 
 
     def draw(self):
         if obj:
             glPushMatrix()
+            glMultMatrixf(self.RT.transpose())
             glScale(1.0/self.scale,1.0/self.scale,1.0/self.scale)
             glCallList(self.obj.gl_list)
             glPopMatrix()
@@ -98,7 +99,7 @@ class Mesh(object):
             normal /= np.sqrt(np.dot(normal,normal))
             norm[i,:] = normal
             
-        return sample, norm
+        return pointmodel.PointModel(sample, norm, self.RT)
 
 
 def load_random():
@@ -107,9 +108,6 @@ def load_random():
  
 
 def load(meshname, do_scale=True):
-    if meshname in ('teapot', 'bunny69k', 'blueghost'):
-        do_scale = True
-
     # Load a mesh from an obj file
     global obj
     savedpath = os.getcwd()
@@ -150,7 +148,7 @@ def load(meshname, do_scale=True):
     global faces
     faces = np.array([(v[0],v[1],v[2],0) for v,_,_,_ in obj.faces])-1
 
-    obj = Mesh(vertices, faces, obj, scale)
+    obj = Mesh(vertices, faces, obj, scale=scale)
     return obj
 
 

@@ -46,15 +46,17 @@ def render(rect=((0,0),(640,480))):
     (L,T),(R,B) = rect
     glViewport(0, 0, 640, 480)
     glClearColor(0,0,0,0)
-
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    glOrtho(0, 640, 0, 480, -10, 0)
 
     def read():
         readpixels = glReadPixels(L, T, R-L, B-T, GL_DEPTH_COMPONENT, GL_FLOAT)
         readpixelsA = glReadPixels(L, T, R-L, B-T, GL_RGBA, GL_UNSIGNED_BYTE,
                                    outputType='array')
-        depth = np.empty((480,640),dtype='f')
-        depth = .1 / np.nan_to_num(readpixels.reshape((480,640)))
+        # Returns the distance in milliunits
+        depth = 100.0 / np.nan_to_num(1.0 - readpixels.reshape((480,640)))
         color = readpixelsA.reshape((480,640,4))
         return depth, color
 
