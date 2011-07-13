@@ -5,15 +5,18 @@ import pointmodel
 
 class RangeImage(object):
     """Depth image, numpy 2D array ('f').
-    - Depth values of zero indicate no good measurement
-    - Normal computation is performed on the original
+    - Depth units are in millimeters, just like OpenNI
+    - Values of zero indicate no good measurement
+    - Normals computation is performed on the
+        1.0/meters image (recip_depth_openni)
     """
     def __init__(self, depth, camera=None):
         self.depth = depth
         self.camera = camera
 
+
     def compute_normals(self, rect=((0,0),(640,480)), win=7):
-        """
+        """Computes the normals
         """
         assert self.depth.dtype == np.float32
         from scipy.ndimage.filters import uniform_filter
@@ -21,7 +24,7 @@ class RangeImage(object):
         v,u = np.mgrid[t:b,l:r]
         depth = self.depth
         depth = depth[v,u]
-        depth[depth==0] = -1e8  # 2047
+        #depth[depth==0] = -1e8  # 2047
         depth = calibkinect.recip_depth_openni(depth.astype('u2'))
         self.drecip = depth
         depth = uniform_filter(depth, win)
@@ -51,7 +54,7 @@ class RangeImage(object):
         self.weights = weights
 
 
-    def pointmodel(self):
+    def point_model(self, do_compute_normals=False):
         if self.camera is not None:
             mat = np.linalg.inv(self.camera.KK)
         else:
@@ -60,6 +63,8 @@ class RangeImage(object):
         v,u = np.mgrid[:480,:640].astype('f')
         depth = self.depth
         depth = calibkinect.recip_depth_openni(depth.astype('u2'))
+        mask = depth > 0        
+
         X,Y,Z,W = u,v,depth,1
 
         x = X*mat[0,0] + Y*mat[0,1] + Z*mat[0,2] + W*mat[0,3]
@@ -67,5 +72,13 @@ class RangeImage(object):
         z = X*mat[2,0] + Y*mat[2,1] + Z*mat[2,2] + W*mat[2,3]
         w = X*mat[3,0] + Y*mat[3,1] + Z*mat[3,2] + W*mat[3,3]
 
-        return pointmodel.PointModel(np.dstack((x/w,y/w,z/w)).reshape(-1,3))
+        if do_compute_normals:
+            self.compute_normals()
+            n = np.ascontiguousarray(self.normals[mask,:])
+        else:
+            n = None
 
+        self.xyz = np.dstack((x/w,y/w,z/w))
+        
+        return pointmodel.PointModel(np.ascontiguousarray(np.dstack((x/w,y/w,z/w))[mask,:]),
+                                     n)

@@ -15,9 +15,9 @@ class PointModel(object):
         Args:
            xyz: numpy array (n by 3)
         """
-        self.xyz = xyz
-        self.norm = norm
-        self.RT = RT
+        self.xyz = xyz.astype('f') if xyz is not None else xyz
+        self.norm = norm.astype('f') if norm is not None else norm
+        self.RT = RT.astype('f') if RT is not None else RT
         self._initialized = False
 
 
@@ -45,9 +45,10 @@ class PointModel(object):
         self.update_buffers()
 
 
-    def __close__(self):
+    def __del__(self):
         if self._initialized:
-            glDeleteBuffersARB([self.rgbabuf, self.normalsbuf, self.xyzbuf])
+            glDeleteBuffersARB(3, [self.rgbabuf, self.normalsbuf, self.xyzbuf])
+            glDeleteTextures((self.rgbtex,))
 
 
     def update_buffers(self):
@@ -104,7 +105,6 @@ class PointModel(object):
             glEnableClientState(GL_NORMAL_ARRAY)
         if not XYZ is None:
             # Draw the points
-            glPointSize(2)
             glDrawElementsui(GL_POINTS, np.arange(len(XYZ)))
         glDisableClientState(GL_COLOR_ARRAY)
         glDisableClientState(GL_NORMAL_ARRAY)            

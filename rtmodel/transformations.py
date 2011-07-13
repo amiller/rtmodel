@@ -303,8 +303,8 @@ def rotation_matrix(angle, direction, point=None):
     True
     >>> R0 = rotation_matrix(angle, direc, point)
     >>> R1 = rotation_matrix(-angle, -direc, point)
-    >>> is_same_transform(R0, R1)
     True
+    >>> is_same_transform(R0, R1)
     >>> I = numpy.identity(4, numpy.float64)
     >>> numpy.allclose(I, rotation_matrix(math.pi*2, direc))
     True
@@ -646,9 +646,9 @@ def shear_matrix(angle, direction, point, normal):
     The shear plane is defined by a point and normal vector. The direction
     vector must be orthogonal to the plane's normal vector.
 
-    A point P is transformed by the shear matrix into P" such that
-    the vector P-P" is parallel to the direction vector and its extent is
-    given by the angle of P-P'-P", where P' is the orthogonal projection
+    A point P is transformed by the shear matrix into P'' such that
+    the vector P-P'' is parallel to the direction vector and its extent is
+    given by the angle of P-P'-P'', where P' is the orthogonal projection
     of P onto the shear plane.
 
     >>> angle = (random.random() - 0.5) * 4*math.pi

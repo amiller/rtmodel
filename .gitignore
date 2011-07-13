@@ -1,0 +1,6 @@
+*~
+*.pyc
+rtmodel/*.html
+rtmodel/*speed.c
+rtmodel/fasticp.c
+*.so

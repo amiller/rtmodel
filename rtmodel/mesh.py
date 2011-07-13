@@ -13,7 +13,7 @@ import pointmodel
 
 meshes = [os.path.split(os.path.splitext(_)[0])[1]
           for _ in glob.glob('data/meshes/*.obj')]
-    
+
 
 class Mesh(object):
     """ Representation of a 3D object as a triangle mesh.
@@ -31,6 +31,7 @@ class Mesh(object):
         with offscreen.render() as d:            
             glMatrixMode(GL_MODELVIEW)
             glLoadIdentity()
+            glEnable(GL_DEPTH_TEST)            
             glMultMatrixf(camera.KK.transpose())
             glMultMatrixf(camera.RT.transpose())
             self.draw()
@@ -98,8 +99,14 @@ class Mesh(object):
             normal = np.cross(v2-v1,v3-v1)
             normal /= np.sqrt(np.dot(normal,normal))
             norm[i,:] = normal
+
+        # Center all the points to make it easier to apply handbuilt rotations
+        import transformations
+        T1 = transformations.translation_matrix(sample.mean(0))
+        RT = np.dot(self.RT, T1)
+        sample -= sample.mean(0)
             
-        return pointmodel.PointModel(sample, norm, self.RT)
+        return pointmodel.PointModel(sample, norm, RT)
 
 
 def load_random():
@@ -124,6 +131,8 @@ def load(meshname, do_scale=True):
                          build)
     try:
         os.chdir('data/meshes')
+        obj.compile()
+        offscreen.glxcontext.makecurrent()
         obj.compile()
     finally:
         os.chdir(savedpath)

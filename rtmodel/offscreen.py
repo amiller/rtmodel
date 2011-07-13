@@ -3,6 +3,7 @@ from OpenGL.GL.framebufferobjects import *
 import numpy as np
 import cv
 import camera
+import glxcontext
 from contextlib import contextmanager
 
 
@@ -12,6 +13,8 @@ if not 'initialized' in globals():
 
 def initialize():
     global initialized
+    glxcontext.makecurrent()
+
     if initialized:
         return
 
@@ -56,7 +59,9 @@ def render(rect=((0,0),(640,480))):
         readpixelsA = glReadPixels(L, T, R-L, B-T, GL_RGBA, GL_UNSIGNED_BYTE,
                                    outputType='array')
         # Returns the distance in milliunits
+        old = np.seterr(divide='ignore')
         depth = 100.0 / np.nan_to_num(1.0 - readpixels.reshape((480,640)))
+        np.seterr(**old)
         color = readpixelsA.reshape((480,640,4))
         return depth, color
 
