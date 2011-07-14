@@ -57,7 +57,7 @@ class RangeImage(rangeimage.RangeImage):
         width, height = depth.shape[1], depth.shape[0]
 
         cdef np.ndarray[np.float32_t, ndim=2, mode='c'] out = np.empty((width*height, 3), 'f')
-        cdef np.ndarray[np.float32_t, ndim=3, mode='c'] xyz = np.zeros((height, width, 3), 'f')        
+        cdef np.ndarray[np.float32_t, ndim=3, mode='c'] xyz = np.zeros((height, width, 3), 'f')
 
         cdef np.ndarray[np.float32_t, ndim=2, mode='c'] mat
         if self.camera is not None:
@@ -67,10 +67,9 @@ class RangeImage(rangeimage.RangeImage):
 
         num = _point_model(<np.uint16_t *> depth.data,
                            <np.float32_t *> out.data,
-                           <np.float32_t *> xyz.data,                           
+                           <np.float32_t *> xyz.data,
                            <np.float32_t *> mat.data,
                            width, height)
-
         self.xyz = xyz
 
         if do_compute_normals:
@@ -80,7 +79,7 @@ class RangeImage(rangeimage.RangeImage):
         else:
             n = None
 
-        return pointmodel.PointModel(out[:num,:], n)
+        return pointmodel.PointModel(out[:num,:], n, self.camera.RT)
 
     def point_model_py(self, *args, **kwargs):
         return super(RangeImage, self).point_model(*args, **kwargs)

@@ -33,7 +33,7 @@ class Mesh(object):
             glLoadIdentity()
             glEnable(GL_DEPTH_TEST)            
             glMultMatrixf(camera.KK.transpose())
-            glMultMatrixf(camera.RT.transpose())
+            glMultMatrixf(np.linalg.inv(camera.RT).transpose())
             self.draw()
             depth, _ = d()
         return rangeimage.RangeImage(depth, camera)

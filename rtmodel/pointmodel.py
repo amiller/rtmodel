@@ -10,13 +10,13 @@ class PointModel(object):
     """A model of a 3D object represented as a 3D point cloud.
     """
 
-    def __init__(self, xyz=None, norm=None, RT=np.eye(4,dtype='f')):
+    def __init__(self, xyz=None, normals=None, RT=np.eye(4,dtype='f')):
         """
         Args:
            xyz: numpy array (n by 3)
         """
         self.xyz = xyz.astype('f') if xyz is not None else xyz
-        self.norm = norm.astype('f') if norm is not None else norm
+        self.normals = normals.astype('f') if normals is not None else normals
         self.RT = RT.astype('f') if RT is not None else RT
         self._initialized = False
 
@@ -53,7 +53,7 @@ class PointModel(object):
 
     def update_buffers(self):
         XYZ = self.xyz
-        N = self.norm
+        N = self.normals
         RGBA = None
 
         if XYZ is None: XYZ = np.zeros((0,3),'f')
@@ -89,7 +89,7 @@ class PointModel(object):
         glMultMatrixf(self.RT.transpose())
 
         RGBA = None
-        N = self.norm
+        N = self.normals
         XYZ = self.xyz
 
         glBindBufferARB(GL_ARRAY_BUFFER_ARB, self.xyzbuf)

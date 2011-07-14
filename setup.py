@@ -2,8 +2,8 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Distutils import build_ext
 
-ext_modules=[Extension("rtmodel.fasticp",
-                        ["rtmodel/fasticp.pyx"]),
+ext_modules=[Extension("rtmodel._fasticp",
+                        ["rtmodel/_fasticp.pyx"]),
              Extension("rtmodel.rangeimage_speed",
                         ["rtmodel/rangeimage_speed.pyx"]),
              ]

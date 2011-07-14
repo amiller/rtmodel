@@ -11,8 +11,8 @@ class Camera(object):
             RT: 4x4 numpy matrix ('f')
                 rotation and translation
         """
-        self.KK = KK
-        self.RT = RT
+        self.KK = np.ascontiguousarray(KK.astype('f'))
+        self.RT = np.ascontiguousarray(RT.astype('f'))
 
 
 def kinect_camera():
