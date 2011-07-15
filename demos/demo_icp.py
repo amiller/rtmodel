@@ -5,7 +5,7 @@ from rtmodel import offscreen
 from rtmodel import camera
 from rtmodel import rangeimage
 import rtmodel.rangeimage_speed
-
+from rtmodel import rtmodel
 from rtmodel import pointmodel
 from rtmodel import transformations
 from rtmodel import fasticp
@@ -83,14 +83,40 @@ def perturb(max_iters=100, mod=10):
 
     # Estimate the transformation rp
     for iters in range(max_iters):
-        pnew, err, npairs, uv = fasticp.fast_icp(range_image, pnew, 2000, dist=0.02)
+        pnew, err, npairs, uv = fasticp.fast_icp(range_image, pnew, 0.1, dist=0.02)
         if iters % mod == 0 or 1:
             #print '%d iterations, [%d] RMS: %.3f' % (iters, npairs, np.sqrt(err))
             window.Refresh()
             pylab.waitforbuttonpress(0.02)
 
     window.Refresh()
-    
+
+
+def start():
+    global seqiter, model
+    seqiter = iter(posesequence.random_sequence())
+    model = rtmodel.RTModel()
+
+
+def go():
+    start()
+    while 1:
+        once()
+        window.Refresh()
+        pylab.waitforbuttonpress(0.02)
+
+
+def once():
+    global range_image, points_range
+    ts, M = seqiter.next()
+
+    # Take the image from an alternate camera location
+    obj.RT = np.dot(M, obj.RT)
+    range_image = obj.range_render(camera.kinect_camera())
+    points_range = range_image.point_model()
+    range_image.camera.RT = np.eye(4, dtype='f')
+        
+    #model.add(rimg)
 
 
 def animate_random(max_iters=1000, mod=100):
@@ -106,8 +132,7 @@ def animate_random(max_iters=1000, mod=100):
     pnew = prev_rimg.point_model(True)
     points_range = pnew
 
-    for ts, M in posesequence.random_sequence():
-
+    if 0:
         obj.RT = np.dot(RT, M)
         rimg = obj.range_render(camera.kinect_camera())
         window.canvas.SetCurrent()

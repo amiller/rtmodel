@@ -25,7 +25,7 @@ cdef _c_fast_icp(np.float32_t *xyzA,
                  np.float32_t *uv,
                  np.float32_t *matB,
                  np.float32_t *matKKBtoA,
-                 int samples, float dist2,
+                 float rate, float dist2,
                  np.float32_t A[6][6],
                  np.float32_t B[6]):
 
@@ -40,8 +40,14 @@ cdef _c_fast_icp(np.float32_t *xyzA,
     cdef int npairs = 0
 
     # Sample from the set of points A
-    for _blank in range(samples):
-        i = <int> (drand48() * length);
+    if rate <= 0.: rate = 0.001
+    cdef float two_over_rate = 2.0 / rate
+
+    i = 0
+    while True:
+        i += int(1 + two_over_rate * drand48())
+        if not i < length:
+            break
 
         # Get the coordinates in the range image A
         x = xyzB[i*3+0];
@@ -89,15 +95,12 @@ cdef _c_fast_icp(np.float32_t *xyzA,
         err += d*d
         npairs += 1
 
-        uv[_blank*6+0] = xA
-        uv[_blank*6+1] = yA
-        uv[_blank*6+2] = zA
-        uv[_blank*6+3] = xB
-        uv[_blank*6+4] = yB
-        uv[_blank*6+5] = zB
-        
-
-
+        #uv[_blank*6+0] = xA
+        #uv[_blank*6+1] = yA
+        #uv[_blank*6+2] = zA
+        #uv[_blank*6+3] = xB
+        #uv[_blank*6+4] = yB
+        #uv[_blank*6+5] = zB
 
         c[0] = yA*nzA - zA*nyA
         c[1] = zA*nxA - xA*nzA
@@ -141,7 +144,7 @@ def _fasticp(np.ndarray[np.float32_t, ndim=3, mode='c'] xyzA,
              np.ndarray[np.float32_t, ndim=2, mode='c'] xyzB,
              np.ndarray[np.float32_t, ndim=2, mode='c'] matB,
              np.ndarray[np.float32_t, ndim=2, mode='c'] matKKBtoA,
-             int samples, float dist2):
+             float rate, float dist2):
     height, width = maskA.shape[0], maskA.shape[1]
     length = xyzB.shape[0]
     assert xyzA.shape[0] == normA.shape[0] == height, 'xyzA normA shape height'
@@ -153,7 +156,7 @@ def _fasticp(np.ndarray[np.float32_t, ndim=3, mode='c'] xyzA,
 
     # Build an intermediate value UV coordinates matrix
     cdef np.ndarray[np.float32_t, ndim=2, mode='c'] uv = \
-         np.zeros((samples, 6), dtype='f')
+         np.zeros((length, 6), dtype='f')
 
     # Build the accumulator matrices A (6x6) and B (6x1)
     cdef np.ndarray[np.float32_t, ndim=2, mode='c'] A = \
@@ -170,7 +173,7 @@ def _fasticp(np.ndarray[np.float32_t, ndim=3, mode='c'] xyzA,
                               <np.float32_t *> uv.data,
                               <np.float32_t *> matB.data,
                               <np.float32_t *> matKKBtoA.data,
-                              samples, dist2,
+                              rate, dist2,
                               <np.float32_t (*)[6]> A.data,
                               <np.float32_t *> B.data
                               )

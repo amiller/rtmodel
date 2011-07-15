@@ -1,5 +1,6 @@
 import rangeimage
 import pointmodel
+import numpy as np
 
 DIST1 = 0.02
 RATE1 = 0.15
@@ -13,7 +14,7 @@ MAX_ANCHORS = 5
 
 
 class RTModel(object):
-    def __init__():
+    def __init__(self):
         self.anchors = []
         self.RT = np.eye(4, dtype='f')
 
@@ -87,6 +88,3 @@ class RTModel(object):
             return npairs, pnew
         
         return 0, ptmodel
-
-    def align(rimg1, rimg2):
-    pass

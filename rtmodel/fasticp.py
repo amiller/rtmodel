@@ -5,7 +5,7 @@ from _fasticp import _fasticp
 import transformations
 
 
-def fast_icp(range_image, point_model, samples=10000, dist=0.01):
+def fast_icp(range_image, point_model, rate=0.001, dist=0.01):
     """Returns ICP between a range image and a point model.
     The range_image is held still, an altered 'point_model' is returned
     that's optimally aligned to the range image.
@@ -45,7 +45,7 @@ def fast_icp(range_image, point_model, samples=10000, dist=0.01):
                                      point_model.xyz,
                                      matBtoA,
                                      matKKBtoA,
-                                     samples, dist*dist)
+                                     rate, dist*dist)
 
     xvec = np.linalg.solve(A, B)
     RT = np.eye(4, dtype='f')
