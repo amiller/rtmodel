@@ -23,7 +23,7 @@ class RangeImage(object):
           [u,v,1]' = KK [x, y, z, 1]
       Where [u,v,1] is the storage-specific image coordinates, [x,y,z,1] are
       absolute world coordinates. The convention otherwise is:
-          [x,y,z,1] = RT [xp,yp,zp,1] where [xp,yp,zp,1] are the values stored
+          [x,y,z,1]' = RT [xp,yp,zp,1] where [xp,yp,zp,1] are the values stored
       in data and applying RT to them produces world coordinates
 
         
@@ -92,7 +92,7 @@ class RangeImage(object):
         depth = calibkinect.recip_depth_openni(depth.astype('u2'))
 
         if 'weights' in self.__dict__:
-            mask = depth > 0 & self.weights > 0
+            mask = (depth > 0) & (self.weights > 0)
         else:
             mask = depth > 0
         

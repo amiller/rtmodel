@@ -31,18 +31,19 @@ class PointModel(object):
 
         self._depth = np.empty((480,640,3),np.int16)
         self._depth[:,:,1], self._depth[:,:,0] = np.mgrid[:480,:640]
-        self.xyzbuf = glGenBuffersARB(1)
+        self.normalsbuf, self.xyzbuf, self.rgbabuf = glGenBuffersARB(3)
+
         glBindBufferARB(GL_ARRAY_BUFFER_ARB, self.xyzbuf)
         glBufferDataARB(GL_ARRAY_BUFFER_ARB, 640*480*3*4, None,GL_DYNAMIC_DRAW)
-        self.rgbabuf = glGenBuffersARB(1)
+
         glBindBufferARB(GL_ARRAY_BUFFER_ARB, self.rgbabuf)
         glBufferDataARB(GL_ARRAY_BUFFER_ARB, 640*480*4*4, None,GL_DYNAMIC_DRAW)
-        self.normalsbuf = glGenBuffersARB(1)
-        glBindBufferARB(GL_ARRAY_BUFFER_ARB, self.normalsbuf)
-        glBufferDataARB(GL_ARRAY_BUFFER_ARB, 640*480*4*3, None,GL_DYNAMIC_DRAW)
 
-        self._initialized = True
+        glBindBufferARB(GL_ARRAY_BUFFER_ARB, self.normalsbuf)
+        glBufferDataARB(GL_ARRAY_BUFFER_ARB, 640*480*3*4, None,GL_DYNAMIC_DRAW)
+
         self.update_buffers()
+        self._initialized = True        
 
 
     def __del__(self):
@@ -74,7 +75,8 @@ class PointModel(object):
             glBufferSubDataARB(GL_ARRAY_BUFFER_ARB, 0, XYZ.shape[0]*4*4, RGBA)
         elif not N is None:
             glBindBufferARB(GL_ARRAY_BUFFER_ARB, self.normalsbuf)
-            glBufferSubDataARB(GL_ARRAY_BUFFER_ARB, 0, XYZ.shape[0]*4*3, N)            
+            glBufferSubDataARB(GL_ARRAY_BUFFER_ARB, 0, XYZ.shape[0]*3*4, N)
+
         glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0)
 
 
@@ -82,9 +84,10 @@ class PointModel(object):
         pass
 
 
-    def draw(self):        
+    def draw(self):
         self.create_buffers()
 
+        
         glPushMatrix()
         glMultMatrixf(self.RT.transpose())
 
@@ -98,7 +101,7 @@ class PointModel(object):
         if not RGBA is None:
             glBindBufferARB(GL_ARRAY_BUFFER_ARB, self.rgbabuf)
             glColorPointer(4, GL_FLOAT, 0, None)
-            glEnableClientState(GL_COLOR_ARRAY)            
+            glEnableClientState(GL_COLOR_ARRAY)         
         if not N is None:
             glBindBufferARB(GL_ARRAY_BUFFER_ARB, self.normalsbuf)
             glNormalPointer(GL_FLOAT, 0, None)
@@ -107,7 +110,7 @@ class PointModel(object):
             # Draw the points
             glDrawElementsui(GL_POINTS, np.arange(len(XYZ)))
         glDisableClientState(GL_COLOR_ARRAY)
-        glDisableClientState(GL_NORMAL_ARRAY)            
+        glDisableClientState(GL_NORMAL_ARRAY)
         glDisableClientState(GL_VERTEX_ARRAY)
         glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0)
         glDisable(GL_BLEND)

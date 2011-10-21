@@ -6,6 +6,8 @@ ext_modules=[Extension("rtmodel._fasticp",
                         ["rtmodel/_fasticp.pyx"]),
              Extension("rtmodel.rangeimage_speed",
                         ["rtmodel/rangeimage_speed.pyx"]),
+             Extension("rtmodel._volume",
+                       ["rtmodel/_volume.pyx"]),
              ]
 
 setup(name='Real-Time 3D Modeling (rtmodel)',

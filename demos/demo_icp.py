@@ -82,19 +82,27 @@ def perturb(max_iters=100, mod=10):
     pnew = rimg.point_model()
 
     # Estimate the transformation rp
+
     for iters in range(max_iters):
-        pnew, err, npairs, uv = fasticp.fast_icp(range_image, pnew, 0.1, dist=0.02)
+        npairs, pnew = model.align(range_image, pnew, rtmodel.RATE1, rtmodel.DIST1, 6)
+        #pnew, err, npairs, uv = fasticp.fast_icp(range_image, pnew, 0.1, dist=0.05)
         if iters % mod == 0 or 1:
             #print '%d iterations, [%d] RMS: %.3f' % (iters, npairs, np.sqrt(err))
             window.Refresh()
             pylab.waitforbuttonpress(0.02)
+            break
 
     window.Refresh()
 
 
 def start():
-    global seqiter, model
-    seqiter = iter(posesequence.random_sequence())
+    global seqiter, model, RTold, RTguess
+    RTguess = None
+    obj.RT = np.eye(4, dtype='f')
+    obj.RT[:3,3] = -obj.vertices[:,:3].mean(0)
+    obj.RT[:3,3] += [0,0,-3.0]    
+    RTold = obj.RT
+    seqiter = iter(posesequence.random_sequence(fps=60.0))
     model = rtmodel.RTModel()
 
 
@@ -107,16 +115,26 @@ def go():
 
 
 def once():
-    global range_image, points_range
+    global range_image, points_range, RTold, RTguess
     ts, M = seqiter.next()
 
     # Take the image from an alternate camera location
-    obj.RT = np.dot(M, obj.RT)
+    obj.RT = np.dot(RTold, M)
     range_image = obj.range_render(camera.kinect_camera())
+
     points_range = range_image.point_model()
-    range_image.camera.RT = np.eye(4, dtype='f')
-        
-    #model.add(rimg)
+    if RTguess is None:
+        range_image.camera.RT = np.eye(4, dtype='f')
+    else:
+        range_image.camera.RT = RTguess
+
+    p = model.add(range_image)
+    if p:
+        points_range = p
+        RTguess = p.RT
+
+    window.Refresh()
+    pylab.waitforbuttonpress(0.02)    
 
 
 def animate_random(max_iters=1000, mod=100):
@@ -180,18 +198,23 @@ def post_draw():
     # Red: points from the range image (observation)
     glColor(1,0,0)
     glPointSize(1)    
+    #pnew.draw()
     points_range.draw()
 
     # Estimated points (corrected estimate)
     glColor(1,1,0)
-    glPointSize(2)
-    pnew.draw()
+    glPointSize(1)
+    if 'model' in globals():
+        for a in model.anchors:
+            a.pm.draw()
+            #a.point_model().draw()
+
 
 
     global projcam, modelcam
     modelcam = glGetFloatv(GL_MODELVIEW_MATRIX).transpose()
     projcam = glGetFloatv(GL_PROJECTION_MATRIX).transpose()
-    #obj.draw()
+    obj.draw()
     glDisable(GL_LIGHTING)
     glColor(1,1,1,1)
 

@@ -7,68 +7,51 @@ from rtmodel import rangeimage
 from rtmodel import pointmodel
 from rtmodel import transformations
 from rtmodel import fasticp
-
+from rtmodel import volume
+from rtmodel import opencl
 
 if not 'window' in globals():
-    window = PointWindow(size=(640,480))
+    window = PointWindow(size=(640,480))#, pos=(20,20))
     print """
     Demo Objrender:
-        search for "Points to draw" and uncomment different points
         refresh()
-        perturb(): apply a random matrix to the point model
         load_obj(): select a random object and load it
     """
 
+def load_obj(name='blueghost'):
+    global obj, points, range_image, vol
 
-def random_perturbation(angle_max=np.pi/10, trans_max=0.10, point=None):
-    axis = np.random.rand(3)-0.5
-    angle = np.random.rand()*angle_max
-    trans = (np.random.rand(3)*2-1.0)*trans_max
-    m4 = transformations.rotation_matrix(angle, axis)
-    #m4[:3,3] += trans
-    return m4
+    window.canvas.SetCurrent()
+    obj = mesh.load(name)
 
-
-def load_obj():
-    global obj, points, points2, points3, range_image
-
-    #obj = mesh.load_random()
-    obj = mesh.load('blueghost')
-    obj.calculate_area_lookup()
+    obj.RT = np.eye(4, dtype='f')
     obj.RT[:3,3] = -obj.vertices[:,:3].mean(0)
-    obj.RT[:3,3] += [0,0,-3.0]
 
-    points = obj.sample_point_cloud(10000)
-    n = np.hstack((points.norm, np.ones((points.norm.shape[0],1),'f')))
-    dummy = np.array(len(points.xyz)*[[1,1,1,1]],'f')
+    # Range image of the original points
+    cam = camera.kinect_camera()
+    cam.RT[:3,3] += [0, 0, 3.0]
+    range_image = obj.range_render(cam)
+    points = range_image.point_model(True)
+    
+    #range_image = obj.range_render(np.dot(camera.kinect_camera(), rp))
 
-    range_image = obj.range_render(camera.kinect_camera())
-    range_image.compute_normals()
-    points2 = range_image.point_model()
+    vol = volume.Volume()
+    #vol.distance_transform(range_image)
 
     window.lookat = obj.RT[:3,3] + obj.vertices[:,:3].mean(0)
-    refresh()
-
-
-def perturb():
-    global obj, points, points2, points3, range_image
-    rp = random_perturbation()
-    points3 = pointmodel.PointModel(points.xyz, points.norm, np.dot(points.RT, rp))
     window.Refresh()
-    
 
 def refresh():
-    global obj, points, points2, points3, range_image    
-    points3 = pointmodel.PointModel(points.xyz, points.norm, points.RT)
+    global obj, points
     window.Refresh()
-
-
-if not 'obj' in globals():
-    load_obj()
-
 
 @window.event
 def pre_draw():
+    global obj
+    if not 'obj' in globals():
+        load_obj()
+        window.Refresh()
+    
     glLightfv(GL_LIGHT0, GL_POSITION, (-40, 200, 100, 0.0))
     glLightfv(GL_LIGHT0, GL_AMBIENT, (0.3, 0.3, 0.3, 0.0))
     glLightfv(GL_LIGHT0, GL_DIFFUSE, (0.3, 0.3, 0.3, 0.0))
@@ -84,16 +67,13 @@ def pre_draw():
 @window.event
 def post_draw():
     # Points to draw
-    
     glColor(0,1,0)
     glPointSize(4)
-    #points.draw()
+    points.draw()
     glColor(1,1,0)
-    points3.draw()
 
-    # Red: points from the range image
-    glColor(1,0,0)
-    points2.draw()
+    glLineWidth(2)
+    range_image.camera.render_frustum()
 
     global projcam, modelcam
     modelcam = glGetFloatv(GL_MODELVIEW_MATRIX).transpose()
@@ -102,6 +82,6 @@ def post_draw():
     glDisable(GL_LIGHTING)
     glColor(1,1,1,1)
 
+    vol.render_bounds()
 
 window.Refresh()
-
