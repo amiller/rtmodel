@@ -89,7 +89,7 @@ kernel void zero_tsdf(
   unsigned int iY = get_global_id(1);
   unsigned int iZ = get_global_id(0);
   unsigned int index = iX*(N_WIDTH*N_WIDTH) + iY*(N_WIDTH) + iZ;
-  voxels[index] += (short2)(iX, 1);
+  voxels[index] += (short2)(iX, iY);
 }
 
 kernel void zero_tsdf_2(
@@ -276,7 +276,6 @@ print program.get_build_info(context.devices[0], cl.program_build_info.LOG)
 def print_all():
   print_info(context.devices[0], cl.device_info)
   print_info(program, cl.program_info)
-  print_info(program.normal_compute, cl.kernel_info)
   print_info(queue, cl.command_queue_info)
 
 
@@ -322,7 +321,6 @@ def zero_tsdf():
     for i in range(len(voxels_buf)):
         evt = program.zero_tsdf(queue, (N_WIDTH,N_WIDTH,N_WIDTH/8),
                                 None, voxels_buf[i])
-        print 'i:', i
     evt.wait()
     return evt
 
@@ -330,7 +328,6 @@ def zero_tsdf_2():
     for i in range(len(voxels_buf)):
         evt = program.zero_tsdf_2(queue, (N_WIDTH,N_WIDTH/8),
                                 None, voxels_buf[i])
-        print 'i:', i
     #evt = program.zero_tsdf_2(queue, (N_WIDTH,N_WIDTH), None, voxels_buf)
     evt.wait()
     return evt
