@@ -1,14 +1,20 @@
 /* Andrew Miller <amiller@dappervision.com>
  *
- * Cuda 512*512*512*4 test
+ * Cuda 512*512*512*4bytes test
  * 
  * According to the KinectFusion UIST 2011 paper, it's possible 
  * to do a sweep of 512^3 voxels, 32-bits each, in ~2ms on a GTX470.
  * 
- * This code is a simple benchmark accessing 512^3 voxels. 
+ * This code is a simple benchmark accessing 512^3 voxels. Each
+ * voxel has two 16-bit components. In this benchmark kernel, we
+ * simply increment these values by a constant K. More than anything
+ * it's a test of the memory bandwidth.
+ *
+ * On my GTX470 card, this kernel takes 10.7ms instead of ~2ms. Is there
+ * a faster way to do this?
  *
  * Citation: http://dl.acm.org/citation.cfm?id=2047270 
- * Public gdocs link: http://tinyurl.com/6xlznbx
+ * Public gdocs pdf link: http://tinyurl.com/6xlznbx
  */
 
 #include <stdio.h>
@@ -22,15 +28,16 @@ struct Voxel {
 };
 
 const int N_BYTES = (512*512*512*4);
-const int N_LOOPS = 10;
+const int N_LOOPS = 1000;
+const int K = 13;
 
 __global__ void incr_tsdf(Voxel *vox)
 {
-   for (int z = 0; z < 512; z++) {
-      int idx = blockIdx.x*512*512 + z*512 + threadIdx.x;
-      vox[idx].sd += threadIdx.x;
-      vox[idx].w += blockIdx.x;
-   }
+    for (int z = 0; z < 512; z++) {
+      	int idx = z*512*512 + blockIdx.x*512 + threadIdx.x;
+        vox[idx].sd += K;
+        vox[idx].w += K;
+    }
 }
 
 int main(void) {
@@ -63,8 +70,8 @@ int main(void) {
     	for (int j = 0; j < 512; j++) {
 	    for (int k = 0; k < 512; k++) {
 	    	int idx = i*512*512 + j*512 + k;
-	    	assert(vox_cpu[idx].sd == N_LOOPS*k);
-	    	assert(vox_cpu[idx].w == N_LOOPS*i);
+	    	assert(vox_cpu[idx].sd == (short)N_LOOPS*K);
+	    	assert(vox_cpu[idx].w == (short)N_LOOPS*K);
 	    }
 	}
     }
