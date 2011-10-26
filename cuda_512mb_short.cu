@@ -24,9 +24,9 @@
 
 const int N_DATA = (512*512*512*2);
 const int N_BYTES = (N_DATA*2);
-const int N_GRID = 512;
+const int N_GRID = 512*16;
 const int N_BLOCK = 512;
-const int N_CHUNK = 8;
+const int N_CHUNK = 1;
 const int N_FAN = N_DATA/N_GRID/N_BLOCK/N_CHUNK;
 const int K = 13;
 const int N_LOOPS = 10;
