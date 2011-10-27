@@ -24,9 +24,9 @@
 
 const int N_DATA = (512*512*512*2);
 const int N_BYTES = (N_DATA*2);
-const int N_GRID = 512*16;
+const int N_GRID = 512*1;
 const int N_BLOCK = 512;
-const int N_CHUNK = 1;
+const int N_CHUNK = 4;
 const int N_FAN = N_DATA/N_GRID/N_BLOCK/N_CHUNK;
 const int K = 13;
 const int N_LOOPS = 10;
@@ -42,9 +42,28 @@ __global__ void incr_data1(short int *data) {
     int idx = blockIdx.x*(N_FAN*N_BLOCK*N_CHUNK) + i*(N_BLOCK*N_CHUNK) + threadIdx.x*(N_CHUNK);
 
     // Inner loop processes 16 bytes (8 short ints) at once (a chunk)
-    #pragma unroll
-    for (int j = 0; j < N_CHUNK; j++, idx++) {
-      data[idx] += K;
+    for (int j = 0; j < N_CHUNK; j+=4, idx++) {
+      short4 *d = (short4 *) data;
+      d[(idx+j)/4].x += K;
+      d[(idx+j)/4].y += K;
+      d[(idx+j)/4].z += K;
+      d[(idx+j)/4].w += K;
+    }
+  }
+}
+
+__global__ void incr_data2(short int *data) {
+  // Outer loop skips by strides of N_BLOCK*N_CHUNK
+  for (int i = 0; i < N_FAN; i++) {
+    int idx = blockIdx.x*(N_FAN*N_BLOCK*N_CHUNK) + i*(N_BLOCK*N_CHUNK) + threadIdx.x*(N_CHUNK);
+
+    // Inner loop processes 16 bytes (8 short ints) at once (a chunk)
+    for (int j = 0; j < N_CHUNK; j+=8, idx++) {
+      short4 *d = (short4 *) data;
+      d[(idx+j)/4].x += K;
+      d[(idx+j)/4].y += K;
+      d[(idx+j)/4].z += K;
+      d[(idx+j)/4].w += K;
     }
   }
 }
