@@ -9,6 +9,7 @@ from rtmodel import transformations
 from rtmodel import fasticp
 from rtmodel import volume
 from rtmodel import opencl
+from rtmodel import cuda
 
 if not 'window' in globals():
     window = PointWindow(size=(640,480))#, pos=(20,20))
@@ -35,11 +36,23 @@ def load_obj(name='blueghost'):
     
     #range_image = obj.range_render(np.dot(camera.kinect_camera(), rp))
 
-    vol = volume.Volume()
-    #vol.distance_transform(range_image)
+    vol = volume.Volume(N=128)
+    vol.distance_transform_cuda(range_image)
 
     window.lookat = obj.RT[:3,3] + obj.vertices[:,:3].mean(0)
     window.Refresh()
+
+
+def raycast():
+    vol.raycast_cuda(windowcam)
+    figure(1);
+    clf();
+    title('Depth (volumetric raycast, cuda)');
+    imshow(vol.cuda_volume.c_depth);
+    figure(2);
+    clf();
+    title('Normals (volumetric raycast, cuda)');
+    imshow(vol.cuda_volume.c_norm*.5+.5);
 
 def refresh():
     global obj, points
@@ -75,9 +88,10 @@ def post_draw():
     glLineWidth(2)
     range_image.camera.render_frustum()
 
-    global projcam, modelcam
+    global windowcam
     modelcam = glGetFloatv(GL_MODELVIEW_MATRIX).transpose()
     projcam = glGetFloatv(GL_PROJECTION_MATRIX).transpose()
+    windowcam = camera.Camera(range_image.camera.KK, np.linalg.inv(modelcam))
     obj.draw()
     glDisable(GL_LIGHTING)
     glColor(1,1,1,1)

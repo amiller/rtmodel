@@ -2,6 +2,7 @@ import numpy as np
 from OpenGL.GL import *
 import calibkinect
 import _volume
+import cuda
 
 
 def depth_inds(mat, X, Y, Z):
@@ -14,13 +15,15 @@ def depth_inds(mat, X, Y, Z):
 
 
 class Volume(object):
-    def __init__(self, RT=np.eye(4, dtype='f')):
-
+    def __init__(self, N=128, RT=np.eye(4, dtype='f')):
+        # Cuda
+        self.cuda_volume = cuda.CudaVolume(N)
+        
         # Number of voxel cells per side
-        self.N = N = 512
+        self.N = N
 
         # Volume size, in meters
-        width = 2.0
+        self.width = width = 2.0
 
         self.RT = np.eye(4)
         self.KK = np.array([[N/width, 0, 0, N/2],
@@ -35,10 +38,11 @@ class Volume(object):
         self.W = np.zeros([N,N,N], 'u2')
 
         # Constants
-        self.MAX_D = 0.02
+        self.MAX_D = 0.05
 
 
     def render_bounds(self):
+        # Requires an OpenGL context
         # Draw the eight corners
         try:
             glMatrixMode(GL_MODELVIEW)
@@ -82,6 +86,34 @@ class Volume(object):
         depth = 0.001 * range_image.depth
         _volume._volume(depth, self.SD, self.W, mat, self.MAX_D)
 
+
+    def distance_transform_cuda(self, range_image):
+        # Find the reference depth for each voxel, and the sampled depth
+        cam = range_image.camera
+        mat = np.eye(4, dtype='f')
+        mat = np.dot(mat, cam.KK)
+        mat = np.dot(mat, np.linalg.inv(cam.RT))
+        mat = np.dot(mat, self.RT)
+        mat = np.dot(mat, np.linalg.inv(self.KK))
+        mat = mat.astype('f')
+
+        depth = 0.001 * range_image.depth
+        self.cuda_volume.init_tsdf(depth, mat, self.MAX_D)
+
+
+    def raycast_cuda(self, cam):
+        mat = np.eye(4, dtype='f')
+        mat = np.dot(mat, self.KK)
+        mat = np.dot(mat, np.linalg.inv(self.RT))
+        mat = np.dot(mat, cam.RT)
+        c = mat[:3,3]
+        mat = np.dot(mat, np.linalg.inv(cam.KK))
+        mat = mat.astype('f')
+
+        SKIP_A = self.MAX_D/2
+        SKIP_B = SKIP_A * self.KK[0,0]
+        self.cuda_volume.raycast_tsdf(mat, c, SKIP_A, SKIP_B)
+        
 
     def distance_transform_numpy(self, range_image):
         MAX_D = self.MAX_D

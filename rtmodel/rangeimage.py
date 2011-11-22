@@ -89,6 +89,8 @@ class RangeImage(object):
 
         v,u = np.mgrid[:480,:640].astype('f')
         depth = self.depth
+
+        # Convert the depth to units of (1./meters)
         depth = calibkinect.recip_depth_openni(depth.astype('u2'))
 
         if 'weights' in self.__dict__:

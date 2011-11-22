@@ -13,7 +13,7 @@
  * On my GTX470 card, this kernel takes 10.7ms instead of ~2ms. Is there
  * a faster way to do this?
  *
- * Citation: http://dl.acm.org/citation.cfm?id=2047270 
+ * Citation: http://dl.acm.org/citation.cfm?id=2047270
  * Public gdocs pdf link: http://tinyurl.com/6xlznbx
  */
 
@@ -28,23 +28,26 @@ struct Voxel {
 };
 
 const int N_BYTES = (512*512*512*4);
-const int N_LOOPS = 1000;
-const int K = 13;
+const int N_LOOPS = 10;
+const int K = 7;
 
-__global__ void incr_tsdf(Voxel *vox)
+__global__ void incr_tsdf(Voxel *vox, Voxel *out)
 {
+    int idx = blockIdx.x*512 + threadIdx.x;
     for (int z = 0; z < 512; z++) {
-      	int idx = z*512*512 + blockIdx.x*512 + threadIdx.x;
-        vox[idx].sd += K;
-        vox[idx].w += K;
+	out[idx].sd = vox[idx].sd + K;
+	out[idx].w = vox[idx].w += K;
+	idx += 512*512;
     }
 }
 
 int main(void) {
     Voxel *vox_gpu;
+    Voxel *vox_gpuA;
     Voxel *vox_cpu;
 
     cudaMalloc((void **) &vox_gpu, N_BYTES);
+    cudaMalloc((void **) &vox_gpuA, N_BYTES);
     vox_cpu = (Voxel *) calloc(N_BYTES, 1);
     cudaMemcpy(vox_gpu, vox_cpu, N_BYTES, cudaMemcpyHostToDevice);
 
@@ -56,7 +59,7 @@ int main(void) {
     cudaEventCreate(&e_stop);
     cudaEventRecord(e_start);
     for (int i = 0; i < N_LOOPS; i++) {      
-	incr_tsdf<<<dimGrid, dimBlock>>>(vox_gpu);
+	incr_tsdf<<<dimGrid, dimBlock>>>(vox_gpu, vox_gpuA);
     }
     cudaEventRecord(e_stop);
     cudaEventSynchronize(e_stop);

@@ -40,6 +40,16 @@ struct __align__(16) short8  {
   N_DATA = (N_GRID) * (N_FAN) * (N_BLOCK) * (N_CHUNK) = 512*512*512*2
  */
 
+__device__ void _incr_short(short int &s) {
+    s += K;
+}
+
+__global__ void copy_data_float(float4 *data) {
+    for (int i = 0; i < N_BYTES / sizeof(float4); i ++) {
+	float4 d = data[i];
+    }
+}
+
 __global__ void incr_data3(short int *data) {
     // Outer loop skips by strides of N_BLOCK*N_CHUNK
     for (int i = 0; i < N_FAN; i++) {
@@ -47,14 +57,14 @@ __global__ void incr_data3(short int *data) {
 	int4 *dd = (int4 *) &data[idx];
 	int4 d_ = *dd;
 	short8 d = *((short8 *) &d_);
-	d.s0 += K;
-	d.s1 += K;
-	d.s2 += K;
-	d.s3 += K;
-	d.s4 += K;
-	d.s5 += K;
-	d.s6 += K;
-	d.s7 += K;
+	_incr_short(d.s0);
+	_incr_short(d.s1);
+	_incr_short(d.s2);
+	_incr_short(d.s3);
+	_incr_short(d.s4);
+	_incr_short(d.s5);
+	_incr_short(d.s6);
+	_incr_short(d.s7);
 	*dd = *((int4 *) &d);
     }
 }
@@ -147,7 +157,7 @@ int main(void) {
   cudaEventRecord(e_start);
 
   // Run the kernel several times
-  for (int i = 0; i < N_LOOPS; i++) {      
+  for (int i = 0; i < N_LOOPS; i++) {
       incr_data3<<<dimGrid, dimBlock>>>(data_gpu);
       //incr_data3<<<dimGrid, dimBlock>>>(data_gpu, data_gpuA);
   }
