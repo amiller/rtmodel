@@ -54,9 +54,83 @@ def raycast():
     title('Normals (volumetric raycast, cuda)');
     imshow(vol.cuda_volume.c_norm*.5+.5);
 
+
+def sample_solve():
+    global prev_cam
+    global range_image, rimg, points
+    if not 'prev_cam' in globals(): prev_cam = windowcam
+
+    # Render the new image from the current camera point of view
+    # but set the camera matrix to the estimate (previous frame)
+    rimg = obj.range_render(windowcam)
+    rimg.camera = prev_cam
+    rimg.point_model(True)
+
+    # Predict a frame by racasting the volume
+    predict_img = vol.raycast_cuda(prev_cam)
+    pts = predict_img.point_model()
+
+    # Compute the fast ICP and update the volume
+    pnew = pts
+    for i in range(100):
+        pnew, err, npairs, uv = fasticp.fast_icp(rimg, pnew, 0.1, dist=0.05)
+    print err, npairs
+    RT = rimg.camera.RT
+    RT = np.dot(RT, np.linalg.inv(pnew.RT))
+    RT = np.dot(RT, (pts.RT))
+    prev_cam = rimg.camera = camera.Camera(rimg.camera.KK, RT)
+    points = pnew.point_model(True)
+
+    vol.distance_transform_cuda(rimg)
+    vol.raycast_cuda(windowcam)
+    raycast()
+    window.Refresh()
+
+
+def sample2():
+    global range_image, rimg, points
+    sample();
+    raycast();
+    figure(3);
+    clf();
+    rimg = vol.raycast_cuda(windowcam);
+    imshow((rimg.depth-range_image.depth).clip(-30,30));
+    title('Absolute reprojection error')    
+    colorbar();
+    points=rimg.point_model(True);
+    window.Refresh()
+
+
+
+def sample():
+    global range_image, points
+    range_image = obj.range_render(windowcam)
+    points = range_image.point_model(True)
+    window.Refresh()
+    vol.distance_transform_cuda(range_image)
+
+
+def icp():
+    global range_image, points
+    range_image = obj.range_render(windowcam)
+    points = range_image.point_model(True)
+    
+    window.Refresh()
+    
+
 def refresh():
     global obj, points
     window.Refresh()
+
+
+@window.eventx
+def EVT_CHAR(evt):
+    key = evt.GetKeyCode()
+    if key == ord(' '):
+        raycast()
+    if key == ord('s'):
+        sample()
+        raycast()
 
 @window.event
 def pre_draw():

@@ -15,8 +15,9 @@ class RangeImage(object):
        can change.
 
        The @camera.KK intrinsic matrix must not change, because internal
-       state @xyz and @normals DO depend on it. If the RT matrix has
-       to change, you could just rebuild them with @compute_normals()
+       state @xyz and @normals depend on it and can't be recomputed.
+       The RT matrix can change, but it would invalidate @normals so you
+        would need to rebuild them with @compute_normals()
 
 
     NOTE: Camera.KK is backwards compared to the convention of RT matrices:

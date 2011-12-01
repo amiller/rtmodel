@@ -13,6 +13,44 @@ struct Voxel {
   short int w;
 };
 
+__device__ float4 Happly(const float m[16], float4 A) {
+    float X = A.x, Y = A.y, Z = A.z;
+    float x = X*m[ 0] + Y*m[ 1] + Z*m[ 2] + m[ 3];
+    float y = X*m[ 4] + Y*m[ 5] + Z*m[ 6] + m[ 7];
+    float z = X*m[ 8] + Y*m[ 9] + Z*m[10] + m[11];
+    float w = X*m[12] + Y*m[13] + Z*m[14] + m[15];
+
+    w = w == 0 ? 0 : 1./w;
+    x = x * w;
+    y = y * w;
+    z = z * w;
+    float4 xyz; xyz.x = x; xyz.y = y; xyz.z = z; xyz.w = 1;
+    return xyz;    
+}
+
+__device__ float4 RTapply(const float m[16], float4 A) {
+    float X = A.x, Y = A.y, Z = A.z;
+    float x = X*m[ 0] + Y*m[ 1] + Z*m[ 2] + m[ 3];
+    float y = X*m[ 4] + Y*m[ 5] + Z*m[ 6] + m[ 7];
+    float z = X*m[ 8] + Y*m[ 9] + Z*m[10] + m[11];
+    float4 xyz; xyz.x = x; xyz.y = y; xyz.z = z;
+    return xyz;
+}
+
+__device__ float4 KKapply(const float m[16], float4 A) {
+    float X = A.x, Y = A.y, Z = A.z;
+    float x = X*m[ 0] +           Z*m[ 2];
+    float y =           Y*m[ 5] + Z*m[ 6];
+    float z =                              m[11];
+    float w =                     Z*m[14];
+    w = 1./w;
+    x *= w;
+    y *= w;
+    z *= w;
+    float4 xyz; xyz.x = x; xyz.y = y; xyz.z = z; xyz.w = 1;
+    return xyz;
+}
+
 __device__ void _test_tsdf(Voxel &vox, const int X, const int Y, const int Z) {
     vox.d += X;
     vox.w += Y;
@@ -31,14 +69,14 @@ __global__ void test_tsdf(Voxel *vox, const int N) {
 
 texture<float, 2, cudaReadModeElementType> depth_tex;
 
-__device__ void _init_tsdf(Voxel &vox,
-                           const float X, const float Y, const float Z,
-                           const float m[16],
-                           const float MAX_D) {
+__device__ void _add_tsdf(Voxel &vox,
+                          const float X, const float Y, const float Z,
+                          const float m[16],
+                          const float MAX_D) {
     float x = X*m[ 0] + Y*m[ 1] + Z*m[ 2] + m[ 3];
     float y = X*m[ 4] + Y*m[ 5] + Z*m[ 6] + m[ 7];
     float z = X*m[ 8] + Y*m[ 9] + Z*m[10] + m[11];
-    float w = X*m[12] + Y*m[13] + Z*m[14] + m[15];
+    float w = X*m[12] + Y*m[13] + Z*m[14] + m[15];    
 
     w = w == 0 ? 0 : 1./w;
     x = x * w;
@@ -50,13 +88,6 @@ __device__ void _init_tsdf(Voxel &vox,
     int ix = (int) x;
     int iy = (int) y;
 
-    /*if (ix < 0) return;
-    if (ix > WIDTH) return;
-    if (iy < 0) return;
-    if (iy >= HEIGHT) return;*/
-    /*ix = min(max(0, ix), WIDTH);
-    iy = min(max(0, iy), HEIGHT);*/
-
     float d = tex2D(depth_tex, ix, iy);
 
     // Clamp and apply weighting function
@@ -67,16 +98,20 @@ __device__ void _init_tsdf(Voxel &vox,
         sw = 0;
         sd = -MAX_D;
     } else if (sd > MAX_D) {
-        sw = 0;
+        sw = 1;
         sd = MAX_D;
     }
-    sd = sd * 32767 / MAX_D;
-    sw = sw * 32767;
+    float MAX_W = 1000;
+    sd = sd * (32767 / MAX_D);
+    sw = sw * (32767 / MAX_W);
 
-    vox.d = (short int) sd;
-    vox.w = (short int) sw;
+    vox.d = (short int) ((vox.w * vox.d + sw * sd) / (vox.w + sw));
+    if ((vox.w + sw) > 32767) vox.w = 32767;
+    else vox.w = (short int) (vox.w + sw);
 }
 
+__constant__ float matKK[16];
+__constant__ float matRT[16];
 __constant__ float mat[16];
 
 __global__ void init_tsdf(Voxel *vox,
@@ -84,22 +119,22 @@ __global__ void init_tsdf(Voxel *vox,
                           const int N) {
     int idx = blockIdx.x*N*N + blockIdx.y*N + threadIdx.x;
     Voxel &v = vox[idx];
-    _init_tsdf(v, blockIdx.x, blockIdx.y, threadIdx.x, mat, MAX_D);
+    _add_tsdf(v, blockIdx.x, blockIdx.y, threadIdx.x, mat, MAX_D);
 }
 
-const float NEAR = 0.5;
 const float FAR = 10.0;
-const float D_NEAR = 1000./NEAR;
 __device__ void _raycast_tsdf(float4 &synth,
                               const Voxel *vox, const int N,
                               const float m[16],
                               const float cx, float cy, float cz,
                               const float X, const float Y,
-                              const float SKIP_A, const float SKIP_B) {
+                              const float SKIP_A, const float SKIP_B,
+                              const float THRESH_DIST,
+                              const float THRESH_NORM) {
 
     // Decide where to start the raycast
-    float dt = NEAR;
-    float Z = D_NEAR;
+    float dt = 0;
+    float Z = SKIP_B;
 
     float x = X*m[ 0] + Y*m[ 1] + Z*m[ 2] + m[ 3];
     float y = X*m[ 4] + Y*m[ 5] + Z*m[ 6] + m[ 7];
@@ -114,28 +149,23 @@ __device__ void _raycast_tsdf(float4 &synth,
     float dx = x-cx;
     float dy = y-cy;
     float dz = z-cz;
-    float _dn = SKIP_B/sqrtf(dx*dx + dy*dy + dz*dz);
-    dx *= _dn;
-    dy *= _dn;
-    dz *= _dn;
+    x = cx; y = cy; z = cz;
     
-    // Advance forward
-    // increment dt a bit
-    #define _IN_BOUNDS() ((x >= 0) && (x < N-1) && \
-                          (y >= 0) && (y < N-1) && \
-                          (z >= 0) && (z < N-1))
+    #define _IN_BOUNDS() ((x > 0) && (x < N-1) && \
+                          (y > 0) && (y < N-1) && \
+                          (z > 0) && (z < N-1))
     #define _IDX(x,y,z) (((int)(x))*N*N + ((int)(y))*N + ((int)(z)))
 
     // First Pass: try to enter the surface
     Voxel v, v0;
     float dt0;
-    while (!_IN_BOUNDS() && dt < FAR) {    
+    while (!_IN_BOUNDS() && dt < FAR) {
         dt += SKIP_A;
         x += dx;
         y += dy;
         z += dz;
     }
-    
+
     if (!_IN_BOUNDS()) {
         synth.x = synth.y = synth.z = synth.w = 1;
         return;
@@ -167,11 +197,20 @@ __device__ void _raycast_tsdf(float4 &synth,
     // and in dx,dy,dz directions
     {
         // Wind back to the actual intersection point
-        float f = -(dt - synth.x) * (SKIP_B/SKIP_A);
+        float f = -(dt - synth.x) * SKIP_B;
         x += f * dx;
         y += f * dy;
         z += f * dz;
+        if (!_IN_BOUNDS()) {
+            synth.x = synth.y = synth.z = synth.w = 0;
+            return;
+        }
         float w  = (float) vox[_IDX(x,y,z)].d;
+        float W = vox[_IDX(x,y,z)].w;
+        if (W < THRESH_DIST) {
+            synth.x = synth.y = synth.z = synth.w = 0;
+            return;
+        }
         float wx = vox[_IDX(x+1,y,z)].d - w;
         float wy = vox[_IDX(x,y+1,z)].d - w;
         float wz = vox[_IDX(x,y,z+1)].d - w;
@@ -195,7 +234,8 @@ __global__ void raycast_tsdf(float4 *synth,
     _raycast_tsdf(synth[idx],
                   vox, N, mat,
                   cx, cy, cz,
-                  x, y, SKIP_A, SKIP_B);
+                  x, y, SKIP_A, SKIP_B,
+                  1, 1);
 }
 """, options=['-use_fast_math'])
 
@@ -218,14 +258,23 @@ class Kernel():
     init_tsdf = mod.get_function('init_tsdf')
     raycast_tsdf = mod.get_function('raycast_tsdf')
     m_ptr, _  = mod.get_global('mat')
+    mKK_ptr, _  = mod.get_global('matKK')
+    mRT_ptr, _  = mod.get_global('matRT')
 
 kernel = Kernel()
+
+def upload_matrix(ptr, mat):
+    assert mat.dtype == np.float32
+    assert mat.flags['C_CONTIGUOUS']
+    assert mat.shape == (4,4)
+    mat = mat.flatten()
+    pycuda.driver.memcpy_htod(ptr, mat)
 
 
 class CudaVolume(object):
 
     def __init__(self, N=128):
-        self.vox_gpu = gpuarray.empty((N,N,N,2), dtype=np.int16)
+        self.vox_gpu = gpuarray.zeros((N,N,N,2), dtype=np.int16)
         self.N = N
 
     def __getattr__(self, item):
@@ -266,25 +315,23 @@ def load_depth_B(depth):
     kernel.depth_gpu.set(depth)
     strm.synchronize()
 
+
 @method
 def init_tsdf(volume, depth, mat, MAX_D=0.02):
     N = volume.N
     MAX_D = np.float32(MAX_D)
-    assert mat.dtype == np.float32
-    mat = mat.flatten()
-    assert mat.shape == (16,)
-    assert mat.flags['C_CONTIGUOUS']
     assert depth.dtype == np.float32
     assert depth.shape == (480,640)
     
     strm = pycuda.driver.Stream()
-    pycuda.driver.memcpy_htod(kernel.m_ptr, mat)
+    upload_matrix(kernel.m_ptr, mat)
     load_depth_B(depth)
 
     kernel.init_tsdf(volume.vox_gpu, MAX_D,
                      np.int32(N),
                      grid=(N,N), block=(N,1,1))
     strm.synchronize()
+
 
 @method
 def raycast_tsdf(volume, mat, c, SKIP_A, SKIP_B):
@@ -296,14 +343,10 @@ __global__ void raycast_tsdf(float4 *synth,
                              const float SKIP_A, const float SKIP_B) {
 """
     N = volume.N
+    upload_matrix(kernel.m_ptr, mat)
     SKIP_A = np.float32(SKIP_A)
     SKIP_B = np.float32(SKIP_B)
-    assert mat.dtype == np.float32
-    mat = mat.flatten()
-    assert mat.shape == (16,)
-    assert mat.flags['C_CONTIGUOUS']
-    cx, cy, cz = map(np.float32, c)
-    pycuda.driver.memcpy_htod(kernel.m_ptr, mat)
+    cx, cy, cz = map(np.float32, c)    
     kernel.raycast_tsdf(kernel.synth_gpu,
                         volume.vox_gpu, np.int32(N),
                         np.int32(640), np.int32(480),

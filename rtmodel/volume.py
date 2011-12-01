@@ -3,6 +3,7 @@ from OpenGL.GL import *
 import calibkinect
 import _volume
 import cuda
+import rangeimage
 
 
 def depth_inds(mat, X, Y, Z):
@@ -90,15 +91,16 @@ class Volume(object):
     def distance_transform_cuda(self, range_image):
         # Find the reference depth for each voxel, and the sampled depth
         cam = range_image.camera
-        mat = np.eye(4, dtype='f')
-        mat = np.dot(mat, cam.KK)
-        mat = np.dot(mat, np.linalg.inv(cam.RT))
-        mat = np.dot(mat, self.RT)
-        mat = np.dot(mat, np.linalg.inv(self.KK))
-        mat = mat.astype('f')
+        matRT = np.eye(4, dtype='f')
+        matRT = np.dot(matRT, np.linalg.inv(cam.RT))
+        matRT = np.dot(matRT, self.RT)
+        matRT = np.dot(matRT, np.linalg.inv(self.KK))
+        matRT = matRT.astype('f')
+
+        matKK = cam.KK
 
         depth = 0.001 * range_image.depth
-        self.cuda_volume.init_tsdf(depth, mat, self.MAX_D)
+        self.cuda_volume.init_tsdf(depth, np.dot(matKK, matRT), self.MAX_D)
 
 
     def raycast_cuda(self, cam):
@@ -110,9 +112,10 @@ class Volume(object):
         mat = np.dot(mat, np.linalg.inv(cam.KK))
         mat = mat.astype('f')
 
-        SKIP_A = self.MAX_D/2
-        SKIP_B = SKIP_A * self.KK[0,0]
+        SKIP_A = self.MAX_D/10
+        SKIP_B = 1./SKIP_A
         self.cuda_volume.raycast_tsdf(mat, c, SKIP_A, SKIP_B)
+        return rangeimage.RangeImage(1000*self.cuda_volume.c_depth, cam)
         
 
     def distance_transform_numpy(self, range_image):

@@ -55,5 +55,6 @@ def fast_icp(range_image, point_model, rate=0.001, dist=0.01):
     # camera.RT * RT * camRTinv * point_model.RT
     RT = np.dot(range_image.camera.RT, np.dot(RT, np.dot(camRTinv, point_model.RT)))
     pnew = pointmodel.PointModel(point_model.xyz, point_model.normals, np.ascontiguousarray(RT))
+    pnew.mask = mask
 
     return pnew, err, npairs, uv
