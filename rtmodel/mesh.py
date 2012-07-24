@@ -4,7 +4,6 @@ import os
 import glob
 import numpy as np
 from OpenGL.GL import *
-import bunch
 import bisect
 import offscreen
 import rangeimage
@@ -73,10 +72,11 @@ class Mesh(object):
             total_area += area
             area_cumsum.append(total_area)
 
-        self.area = bunch.Bunch({
-            'cumsum': area_cumsum,
-            'total': total_area
-            })
+        class Area():
+            cumsum = area_cumsum
+            total = total_area
+
+        self.area = Area()
         
 
     def sample_point_cloud(self, num):
