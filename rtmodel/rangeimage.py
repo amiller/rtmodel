@@ -79,9 +79,8 @@ class RangeImage(object):
 
 
     def compute_normals(self):
-        """Computes the normals, with KK applied but RT not yet applied.
-        RT must be applied to the points in order to obtain points in global
-        coordinate space.
+        """Computes the normals, with KK *and* RT applied. The stored points
+        are in global coordinates.
         """
         v,u = from_rect(np.mgrid, self.rect)
         depth = self.depth_filtered
@@ -96,14 +95,22 @@ class RangeImage(object):
         x = X*mat[0,0] + Y*mat[0,1] + Z*mat[0,2] + W*mat[0,3]
         y = X*mat[1,0] + Y*mat[1,1] + Z*mat[1,2] + W*mat[1,3]
         z = X*mat[2,0] + Y*mat[2,1] + Z*mat[2,2] + W*mat[2,3]
-
         w = np.sqrt(x*x + y*y + z*z)
+
+        x,y,z = (_ / w for _ in (x,y,z))
+
         w[z<0] *= -1
         weights = z*0+1
         weights[depth<-1000] = 0
-        weights[(z/w)<.1] = 0
+        weights[z<=.1] = 0
+        weights[np.abs(dx)+np.abs(dy) > 10] = 0
 
-        self.normals = np.ascontiguousarray(np.dstack((x/w,y/w,z/w)))
+        mat = self.camera.RT
+        x_ = x*mat[0,0] + y*mat[0,1] + z*mat[0,2]
+        y_ = x*mat[1,0] + y*mat[1,1] + z*mat[1,2]
+        z_ = x*mat[2,0] + y*mat[2,1] + z*mat[2,2]
+
+        self.normals = np.ascontiguousarray(np.dstack((x_,y_,z_)))
         self.weights = weights
 
 
