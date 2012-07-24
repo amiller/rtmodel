@@ -1,6 +1,8 @@
 import numpy as np
 import calibkinect
 import pointmodel
+import scipy.ndimage
+from camera import Camera
 
 
 class RangeImage(object):
@@ -27,40 +29,69 @@ class RangeImage(object):
           [x,y,z,1]' = RT [xp,yp,zp,1] where [xp,yp,zp,1] are the values stored
       in data and applying RT to them produces world coordinates
 
-        
-
     NOTE: The fields self.normals and self.xyz are images
     and they still need to apply RT.
     """
-    def __init__(self, depth, camera=None):
+    def __init__(self, depth, camera, rect=None, mask=None):
+        assert depth.dtype == np.uint16
+        assert len(depth.shape) == 2
         self.depth = depth
+
+        assert type(camera) is Camera
         self.camera = camera
 
+        if rect is None:
+            h,w = depth.shape
+            rect = ((0,0),(w,h))
+        else:
+            (l,t),(r,b) = rect
+        self.rect = rect
 
-    def compute_normals(self, rect=((0,0),(640,480)), win=7):
-        """Computes the normals
+    def _inrange(self, lo, hi):
+        return (self.depth>lo) & (self.depth<hi)  # background
+
+    def threshold_and_mask(self, bg):
+
+        mask = self._inrange(bg['bgLo'], bg['bgHi'])
+        dec = 3
+        dil = scipy.ndimage.binary_erosion(mask[::dec,::dec],iterations=2)
+        slices = scipy.ndimage.find_objects(dil)
+        a,b = slices[0]
+        (l,t),(r,b) = (b.start*dec-10,a.start*dec-10),(b.stop*dec+7,a.stop*dec+7)
+        b += -(b-t)%16 # Make the rect into blocks of 16x16 (for the gpu)
+        r += -(r-l)%16 #
+        if t<0: t+= 16
+        if l<0: l+= 16
+        if r>=640: r-= 16
+        if b>=480: b-= 16
+
+        self.mask = mask
+        self.rect = ((l,t),(r,b))
+
+
+    def filter(self, win=7):
+        depth = from_rect(self.depth, self.rect)
+        depth = np.ascontiguousarray(depth)
+        depth = calibkinect.recip_depth_openni(depth)
+        self.depth_recip = depth
+        depth = scipy.ndimage.uniform_filter(depth,win)
+        self.depth_filtered = depth
+
+
+    def compute_normals(self):
+        """Computes the normals, with KK applied but RT not yet applied.
+        RT must be applied to the points in order to obtain points in global
+        coordinate space.
         """
-        assert self.depth.dtype == np.float32
-        from scipy.ndimage.filters import uniform_filter
-        (l,t),(r,b) = rect
-        v,u = np.mgrid[t:b,l:r]
-        depth = self.depth
-        depth = depth[v,u]
-        #depth[depth==0] = -1e8  # 2047
-        depth = calibkinect.recip_depth_openni(depth.astype('u2'))
-        self.drecip = depth
-        depth = uniform_filter(depth, win)
-        self.duniform = depth
-        
+        v,u = from_rect(np.mgrid, self.rect)
+        depth = self.depth_filtered
+
         dx = (np.roll(depth,-1,1) - np.roll(depth,1,1))/2
         dy = (np.roll(depth,-1,0) - np.roll(depth,1,0))/2
 
-        X,Y,Z,W = -dx, -dy, 0*dy+1, -(-dx*u + -dy*v + depth).astype(np.float32)
+        X,Y,Z,W = -dx, -dy, 0*dy+1, -(-dx*u + -dy*v + depth).astype(np.float32) 
 
-        if self.camera is not None:
-            mat = self.camera.KK.transpose()
-        else:
-            mat = np.eye(4,'f')
+        mat = self.camera.KK.transpose()
 
         x = X*mat[0,0] + Y*mat[0,1] + Z*mat[0,2] + W*mat[0,3]
         y = X*mat[1,0] + Y*mat[1,1] + Z*mat[1,2] + W*mat[1,3]
@@ -115,3 +146,8 @@ class RangeImage(object):
 
         self.xyz = np.ascontiguousarray(np.dstack((x/w,y/w,z/w)))
         return pointmodel.PointModel(np.ascontiguousarray(self.xyz[mask,:]), n, self.camera.RT)
+
+
+def from_rect(depth,rect):
+    (l,t),(r,b) = rect
+    return depth[t:b,l:r]

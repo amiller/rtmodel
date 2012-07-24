@@ -50,8 +50,30 @@ cdef _point_model(np.uint16_t *depth,
             i += 1
     return n
 
+cdef _inrange(np.ndarray[np.uint16_t, ndim=2, mode='c'] depth_,
+             np.ndarray[np.uint8_t, ndim=2, mode='c'] mask_,
+             np.ndarray[np.uint16_t, ndim=2, mode='c'] bgHi_,
+             np.ndarray[np.uint16_t, ndim=2, mode='c'] bgLo_,
+             int length):
+    cdef int i
+    cdef np.uint16_t *depth = <np.uint16_t *> depth_.data
+    cdef np.uint8_t *mask = <np.uint8_t *> mask_.data
+    cdef np.uint16_t *bgHi = <np.uint16_t *> bgHi_.data    
+    cdef np.uint16_t *bgLo = <np.uint16_t *> bgLo_.data
+    
+    for i in range(length):
+        mask[i] = depth[i] > bgLo[i] and depth[i] < bgHi[i]
+
 
 class RangeImage(rangeimage.RangeImage):
+    def _inrange(self, lo, hi):
+        depth = self.depth
+        mask = np.empty(depth.shape,'u1')
+        h,w = depth.shape
+        _inrange(depth, mask, hi, lo, w*h)
+        return mask
+
+
     def point_model(self, do_compute_normals=False):        
         cdef np.ndarray[np.uint16_t, ndim=2, mode='c'] depth = self.depth.astype('u2')
         width, height = depth.shape[1], depth.shape[0]
@@ -83,6 +105,7 @@ class RangeImage(rangeimage.RangeImage):
 
     def point_model_py(self, *args, **kwargs):
         return super(RangeImage, self).point_model(*args, **kwargs)
+
 
 # Monkey patch ourselves right in there
 rangeimage.RangeImage = RangeImage
