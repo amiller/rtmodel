@@ -29,8 +29,6 @@ class RangeImage(object):
           [x,y,z,1]' = RT [xp,yp,zp,1] where [xp,yp,zp,1] are the values stored
       in data and applying RT to them produces world coordinates
 
-    NOTE: The fields self.normals and self.xyz are images
-    and they still need to apply RT.
     """
     def __init__(self, depth, camera, rect=None, mask=None):
         assert depth.dtype == np.uint16
@@ -47,11 +45,14 @@ class RangeImage(object):
             (l,t),(r,b) = rect
         self.rect = rect
 
+        if mask is None:
+            mask = np.ones_like(depth).astype('u1').astype('bool')
+        self.mask = mask
+
     def _inrange(self, lo, hi):
         return (self.depth>lo) & (self.depth<hi)  # background
 
     def threshold_and_mask(self, bg):
-
         mask = self._inrange(bg['bgLo'], bg['bgHi'])
         dec = 3
         dil = scipy.ndimage.binary_erosion(mask[::dec,::dec],iterations=2)
@@ -66,6 +67,7 @@ class RangeImage(object):
         if b>=480: b-= 16
 
         self.mask = mask
+        self.weights = (self.depth > 0) & mask
         self.rect = ((l,t),(r,b))
 
 
@@ -90,18 +92,19 @@ class RangeImage(object):
 
         X,Y,Z,W = -dx, -dy, 0*dy+1, -(-dx*u + -dy*v + depth).astype(np.float32) 
 
-        mat = self.camera.KK.transpose()
+        mat = np.linalg.inv(self.camera.KK).transpose()
 
         x = X*mat[0,0] + Y*mat[0,1] + Z*mat[0,2] + W*mat[0,3]
         y = X*mat[1,0] + Y*mat[1,1] + Z*mat[1,2] + W*mat[1,3]
         z = X*mat[2,0] + Y*mat[2,1] + Z*mat[2,2] + W*mat[2,3]
-        w = np.sqrt(x*x + y*y + z*z)
 
+        w = np.sqrt(x*x + y*y + z*z)
+        w[z<0] *= -1
         x,y,z = (_ / w for _ in (x,y,z))
 
-        w[z<0] *= -1
         weights = z*0+1
         weights[depth<-1000] = 0
+        weights[~from_rect(self.mask,self.rect)] = 0
         weights[z<=.1] = 0
         weights[np.abs(dx)+np.abs(dy) > 10] = 0
 
@@ -133,12 +136,14 @@ class RangeImage(object):
         depth = calibkinect.recip_depth_openni(depth.astype('u2'))
 
         if 'weights' in self.__dict__:
-            mask = (depth > 0) & (self.weights > 0)
+            mask = depth > 0
+            (l,t),(r,b) = self.rect
+            mask[t:b,l:r] &= self.weights > 0
         else:
             mask = depth > 0
         
 
-        X,Y,Z,W = u,v,depth,1
+        X,Y,Z,W = u[mask>0], v[mask>0], depth[mask>0], 1
 
         x = X*mat[0,0] + Y*mat[0,1] + Z*mat[0,2] + W*mat[0,3]
         y = X*mat[1,0] + Y*mat[1,1] + Z*mat[1,2] + W*mat[1,3]
@@ -152,7 +157,7 @@ class RangeImage(object):
             n = None
 
         self.xyz = np.ascontiguousarray(np.dstack((x/w,y/w,z/w)))
-        return pointmodel.PointModel(np.ascontiguousarray(self.xyz[mask,:]), n, self.camera.RT)
+        return pointmodel.PointModel(self.xyz.reshape((-1,3)), n, self.camera.RT)
 
 
 def from_rect(depth,rect):
