@@ -35,7 +35,7 @@ class Mesh(object):
             glMultMatrixf(np.linalg.inv(camera.RT).transpose())
             self.draw()
             depth, _ = d()
-        return rangeimage.RangeImage(depth, camera)
+        return rangeimage.RangeImage(depth.astype('u2'), camera)
 
 
     def draw(self):

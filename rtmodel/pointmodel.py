@@ -86,7 +86,6 @@ class PointModel(object):
 
     def draw(self):
         self.create_buffers()
-
         
         glPushMatrix()
         glMultMatrixf(self.RT.transpose())

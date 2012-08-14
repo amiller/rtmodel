@@ -11,15 +11,13 @@ class RangeImage(object):
     - Values of zero indicate no good measurement
     - Normals computation is performed on the
         1.0/meters image (recip_depth_openni)
+    - A Region-of-interest is represented using a 'rect' and 'mask'
 
-    Invariants:
-       The internal data does not depend on self.camera.RT so self.camera.RT
-       can change.
-
-       The @camera.KK intrinsic matrix must not change, because internal
-       state @xyz and @normals depend on it and can't be recomputed.
-       The RT matrix can change, but it would invalidate @normals so you
-        would need to rebuild them with @compute_normals()
+    In addition to the depth data itself, this object may contain several
+    intermediate stages of processing:
+        - Filtered and background-subtracted depth
+        - Normal vectors (world coordinates)
+        - Metric XYZ (world coordinates)
 
 
     NOTE: Camera.KK is backwards compared to the convention of RT matrices:
@@ -34,7 +32,7 @@ class RangeImage(object):
         assert depth.dtype == np.uint16
         assert len(depth.shape) == 2
         self.depth = depth
-
+        
         assert type(camera) is Camera
         self.camera = camera
 
@@ -48,11 +46,21 @@ class RangeImage(object):
         if mask is None:
             mask = np.ones_like(depth).astype('u1').astype('bool')
         self.mask = mask
+        self.weights = mask.astype('f')
+
+        # The computed world points @xyz and @normals are associated with
+        # a second transformation matrix, RT, which is used to allow the
+        # model coordinates to change without recomputing the data.
+        self.RT = np.eye(4,dtype='f')
+        self.xyz = None
+        self.normals = None
 
     def _inrange(self, lo, hi):
         return (self.depth>lo) & (self.depth<hi)  # background
 
     def threshold_and_mask(self, bg):
+        """Modifies the values for mask, weight, and rect.
+        """
         mask = self._inrange(bg['bgLo'], bg['bgHi'])
         dec = 3
         dil = scipy.ndimage.binary_erosion(mask[::dec,::dec],iterations=2)
@@ -70,8 +78,8 @@ class RangeImage(object):
         self.weights = (self.depth > 0) & mask
         self.rect = ((l,t),(r,b))
 
-
     def filter(self, win=7):
+        """Creates @depth_filtered and @depth_recip"""
         depth = from_rect(self.depth, self.rect)
         depth = np.ascontiguousarray(depth)
         depth = calibkinect.recip_depth_openni(depth)
@@ -79,13 +87,15 @@ class RangeImage(object):
         depth = scipy.ndimage.uniform_filter(depth,win)
         self.depth_filtered = depth
 
-
     def compute_normals(self):
         """Computes the normals, with KK *and* RT applied. The stored points
         are in global coordinates.
         """
         v,u = from_rect(np.mgrid, self.rect)
-        depth = self.depth_filtered
+        if 'depth_filtered' in self.__dict__:
+            depth = self.depth_filtered
+        else:
+            depth = calibkinect.recip_depth_openni(from_rect(self.depth, self.rect))
 
         dx = (np.roll(depth,-1,1) - np.roll(depth,1,1))/2
         dy = (np.roll(depth,-1,0) - np.roll(depth,1,0))/2
@@ -113,51 +123,48 @@ class RangeImage(object):
         y_ = x*mat[1,0] + y*mat[1,1] + z*mat[1,2]
         z_ = x*mat[2,0] + y*mat[2,1] + z*mat[2,2]
 
+        #self.normals = np.empty(self.depth.shape+(3,), 'f')
+        #self.normals[t:b,l:r] = np.dstack((x_,y_,z_))
         self.normals = np.ascontiguousarray(np.dstack((x_,y_,z_)))
         self.weights = weights
 
 
-    def point_model(self, do_compute_normals=False):
-        """
-        Effects:
-            self.xyz will contain a 2D grid of XYZ points in camera
-            relative euclidean coordinates. It's still necessary to
-            apply self.camera.RT.
-        """
+    def compute_points(self):
         if self.camera is not None:
             mat = np.linalg.inv(self.camera.KK)
         else:
             mat = np.eye(4,'f')
 
-        v,u = np.mgrid[:480,:640].astype('f')
-        depth = self.depth
+        # TODO: Make this faster by following the region of interest
 
         # Convert the depth to units of (1./meters)
-        depth = calibkinect.recip_depth_openni(depth.astype('u2'))
-
-        if 'weights' in self.__dict__:
-            mask = depth > 0
-            (l,t),(r,b) = self.rect
-            mask[t:b,l:r] &= self.weights > 0
-        else:
-            mask = depth > 0
-        
-
-        X,Y,Z,W = u[mask>0], v[mask>0], depth[mask>0], 1
+        depth = calibkinect.recip_depth_openni(self.depth)/1000
+        v,u = np.mgrid[:480,:640].astype('f')
+        X,Y,Z,W = u, v, depth, u*0+1
 
         x = X*mat[0,0] + Y*mat[0,1] + Z*mat[0,2] + W*mat[0,3]
         y = X*mat[1,0] + Y*mat[1,1] + Z*mat[1,2] + W*mat[1,3]
         z = X*mat[2,0] + Y*mat[2,1] + Z*mat[2,2] + W*mat[2,3]
         w = X*mat[3,0] + Y*mat[3,1] + Z*mat[3,2] + W*mat[3,3]
 
-        if do_compute_normals:
-            self.compute_normals()
-            n = np.ascontiguousarray(self.normals[mask,:])
-        else:
-            n = None
-
         self.xyz = np.ascontiguousarray(np.dstack((x/w,y/w,z/w)))
-        return pointmodel.PointModel(self.xyz.reshape((-1,3)), n, self.camera.RT)
+        
+
+    def point_model(self):
+        """
+        Effects:
+            self.xyz will contain a 2D grid of XYZ points in camera
+            relative euclidean coordinates. It's still necessary to
+            apply self.camera.RT.
+        """
+        assert self.xyz is not None, 'point_model() called but no metric points found \
+                                      (try calling compute_points() first)'
+        (l,t),(r,b) = self.rect
+
+        mask = self.weights > 0
+        xyz = self.xyz[mask,:]
+        normals = self.normals[mask,:] if self.normals is not None else None
+        return pointmodel.PointModel(xyz, normals, self.RT)
 
 
 def from_rect(depth,rect):
