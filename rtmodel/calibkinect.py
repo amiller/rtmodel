@@ -32,5 +32,5 @@ def projection():
     mat = np.array([[fx, 0, -cx, 0],
                     [0, -fy, -cy, 0],
                     [0, 0, 0, 1],
-                    [0, 0, -1., 0]]).astype('f')
-    return np.ascontiguousarray(mat)
+                    [0, 0, -1., 0]])
+    return np.ascontiguousarray(np.linalg.inv(mat).astype('f'))
