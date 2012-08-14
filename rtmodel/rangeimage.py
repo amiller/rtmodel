@@ -130,24 +130,21 @@ class RangeImage(object):
 
 
     def compute_points(self):
-        if self.camera is not None:
-            mat = np.linalg.inv(self.camera.KK)
-        else:
-            mat = np.eye(4,'f')
+        mat = np.dot(self.camera.RT, self.camera.KK)
 
         # TODO: Make this faster by following the region of interest
 
         # Convert the depth to units of (1./meters)
-        depth = calibkinect.recip_depth_openni(self.depth)/1000
+        depth = calibkinect.recip_depth_openni(self.depth)
         v,u = np.mgrid[:480,:640].astype('f')
-        X,Y,Z,W = u, v, depth, u*0+1
+        X,Y,Z = u, v, depth
 
-        x = X*mat[0,0] + Y*mat[0,1] + Z*mat[0,2] + W*mat[0,3]
-        y = X*mat[1,0] + Y*mat[1,1] + Z*mat[1,2] + W*mat[1,3]
-        z = X*mat[2,0] + Y*mat[2,1] + Z*mat[2,2] + W*mat[2,3]
-        w = X*mat[3,0] + Y*mat[3,1] + Z*mat[3,2] + W*mat[3,3]
-
-        self.xyz = np.ascontiguousarray(np.dstack((x/w,y/w,z/w)))
+        x = X*mat[0,0] + Y*mat[0,1] + Z*mat[0,2] + mat[0,3]
+        y = X*mat[1,0] + Y*mat[1,1] + Z*mat[1,2] + mat[1,3]
+        z = X*mat[2,0] + Y*mat[2,1] + Z*mat[2,2] + mat[2,3]
+        w = X*mat[3,0] + Y*mat[3,1] + Z*mat[3,2] + mat[3,3]
+        w = 1/w
+        self.xyz = np.ascontiguousarray(np.dstack((x*w,y*w,z*w)))
         
 
     def point_model(self):
@@ -161,9 +158,12 @@ class RangeImage(object):
                                       (try calling compute_points() first)'
         (l,t),(r,b) = self.rect
 
-        mask = self.weights > 0
+        # TODO: Settle on whether I want chips or embedded images
+        mask = np.zeros_like(self.depth).astype('bool')
+        mask[t:b,l:r] = self.weights > 0
+        #mask = self.weights > 0
         xyz = self.xyz[mask,:]
-        normals = self.normals[mask,:] if self.normals is not None else None
+        normals = self.normals[self.weights>0,:] if self.normals is not None else None
         return pointmodel.PointModel(xyz, normals, self.RT)
 
 
