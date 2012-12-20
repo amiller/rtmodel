@@ -27,19 +27,16 @@ class Mesh(object):
 
 
     def range_render(self, camera):
-        with offscreen.render() as d:            
-            glMatrixMode(GL_MODELVIEW)
-            glLoadIdentity()
+        with offscreen.render(camera) as d:
             glEnable(GL_DEPTH_TEST)            
-            glMultMatrixf(camera.KK.transpose())
-            glMultMatrixf(np.linalg.inv(camera.RT).transpose())
             self.draw()
-            depth, _ = d()
+            depth, _, _, _ = d(debug=True)
         return rangeimage.RangeImage(depth.astype('u2'), camera)
 
 
     def draw(self):
         if obj:
+            glMatrixMode(GL_MODELVIEW)
             glPushMatrix()
             glMultMatrixf(self.RT.transpose())
             glScale(1.0/self.scale,1.0/self.scale,1.0/self.scale)

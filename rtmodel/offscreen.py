@@ -12,7 +12,6 @@ if not 'initialized' in globals():
 
 def initialize():
     global initialized
-    print 'rtmodel initialize'
     glxcontext.makecurrent()
 
     if initialized: return
@@ -104,7 +103,7 @@ def initialize():
 
 
 @contextmanager
-def render(RT, camera, rect=((0,0),(640,480))):
+def render(camera, rect=((0,0),(640,480))):
     initialize()
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glDrawBuffers([GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT1,GL_COLOR_ATTACHMENT2])
@@ -115,18 +114,23 @@ def render(RT, camera, rect=((0,0),(640,480))):
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
     glOrtho(0, 640, 0, 480, -10, 0)
-
     # Configure the shader
     shaders.glUseProgram(SYNTHSHADER)
 
-    # Upload uniform parameters (model matrix)
-    #assert RT.shape == (4,4) and RT.dtype == np.float32
-    #def uniform(f, name, mat, n=1): 
-    #    assert mat.dtype == np.float32
-    #    mat = np.ascontiguousarray(mat)
-    #    f(glGetUniformLocation(SYNTHSHADER, name), n, True, mat)
-    #view_inv = np.linalg.inv(np.dot(camera.RT, camera.KK))
-    #uniform(glUniformMatrix4fv, 'view_inv', view_inv)
+    if 1:
+        # 
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        glMultMatrixf(np.linalg.inv(camera.KK).transpose())
+        glMultMatrixf(np.linalg.inv(camera.RT).transpose())
+    else:
+        # Upload uniform parameters (model matrix)
+        def uniform(f, name, mat, n=1):
+            assert mat.dtype == np.float32
+            mat = np.ascontiguousarray(mat)
+            f(glGetUniformLocation(SYNTHSHADER, name), n, True, mat)
+        view_inv = np.linalg.inv(np.dot(camera.RT, camera.KK))
+        uniform(glUniformMatrix4fv, 'view_inv', view_inv)
 
     # Return (yield) a function to copy the result GPU->Host 
     def read(debug=False):
@@ -137,8 +141,8 @@ def render(RT, camera, rect=((0,0),(640,480))):
                                    outputType='array').reshape((480,640,4))
 
         glReadBuffer(GL_COLOR_ATTACHMENT1)
-        readpixelsB = glReadPixels(L, T, R-L, B-T, GL_RGBA, GL_FLOAT,
-                                   outputType='array').reshape((480,640,4))
+        readpixelsB = glReadPixels(L, T, R-L, B-T, GL_RGB, GL_FLOAT,
+                                   outputType='array').reshape((480,640,3))
 
         glReadBuffer(GL_COLOR_ATTACHMENT2)
         readpixelsC = glReadPixels(L, T, R-L, B-T, GL_RGBA, GL_UNSIGNED_BYTE,
@@ -149,6 +153,7 @@ def render(RT, camera, rect=((0,0),(640,480))):
 
         # Sanity check
         if debug:
+            if depth.max() == 0: print 'Degenerate (empty) depth image'
             print 'Checking two equivalent depth calculations'
             old = np.seterr(divide='ignore')
             within_eps = lambda a,b: np.all(np.abs(a - b) < 2)
@@ -159,7 +164,7 @@ def render(RT, camera, rect=((0,0),(640,480))):
             print 'OK'
 
         # Also return the world coordinates and normals
-        xyz = readpixelsA[:,:,:3]
+        xyz = np.ascontiguousarray(readpixelsA[:,:,:3])
         normals = readpixelsB[:,:,:3]
 
         # Finally, return the color image (typically an index)

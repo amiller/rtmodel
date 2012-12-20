@@ -74,7 +74,7 @@ class RangeImage(rangeimage.RangeImage):
         return mask
 
 
-    def point_model(self, do_compute_normals=False):        
+    def compute_points(self):
         cdef np.ndarray[np.uint16_t, ndim=2, mode='c'] depth = self.depth.astype('u2')
         width, height = depth.shape[1], depth.shape[0]
 
@@ -82,10 +82,7 @@ class RangeImage(rangeimage.RangeImage):
         cdef np.ndarray[np.float32_t, ndim=3, mode='c'] xyz = np.zeros((height, width, 3), 'f')
 
         cdef np.ndarray[np.float32_t, ndim=2, mode='c'] mat
-        if self.camera is not None:
-            mat = np.ascontiguousarray(np.linalg.inv(self.camera.KK))
-        else:
-            mat = np.eye(4,'f')
+        mat = np.ascontiguousarray(np.dot(self.camera.RT, self.camera.KK))
 
         num = _point_model(<np.uint16_t *> depth.data,
                            <np.float32_t *> out.data,
@@ -94,17 +91,9 @@ class RangeImage(rangeimage.RangeImage):
                            width, height)
         self.xyz = xyz
 
-        if do_compute_normals:
-            self.compute_normals()
-            mask = depth > 0
-            n = np.ascontiguousarray(self.normals[mask,:])
-        else:
-            n = None
 
-        return pointmodel.PointModel(out[:num,:], n, self.camera.RT)
-
-    def point_model_py(self, *args, **kwargs):
-        return super(RangeImage, self).point_model(*args, **kwargs)
+    def compute_points_py(self, *args, **kwargs):
+        return super(RangeImage, self).compute_points(*args, **kwargs)
 
 
 # Monkey patch ourselves right in there

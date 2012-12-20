@@ -84,7 +84,7 @@ class Volume(object):
         mat = np.dot(mat, np.linalg.inv(self.KK))
         mat = mat.astype('f')
 
-        depth = 0.001 * range_image.depth
+        depth = 0.001 * range_image.depth.astype(np.float32)
         _volume._volume(depth, self.SD, self.W, mat, self.MAX_D)
 
 
@@ -99,7 +99,7 @@ class Volume(object):
 
         matKK = cam.KK
 
-        depth = 0.001 * range_image.depth
+        depth = 0.001 * range_image.depth.astype(np.float32)
         self.cuda_volume.init_tsdf(depth, np.dot(matKK, matRT), self.MAX_D)
 
 
@@ -115,9 +115,7 @@ class Volume(object):
         SKIP_A = self.MAX_D/10
         SKIP_B = 1./SKIP_A
         self.cuda_volume.raycast_tsdf(mat, c, SKIP_A, SKIP_B)
-        return rangeimage.RangeImage(1000*self.cuda_volume.c_depth, cam)
-        
-
+        return rangeimage.RangeImage((1000*self.cuda_volume.c_depth).astype('u2'), cam)
     def distance_transform_numpy(self, range_image):
         MAX_D = self.MAX_D
         

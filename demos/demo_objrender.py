@@ -13,13 +13,19 @@ from rtmodel import cuda
 
 if not 'window' in globals():
     window = PointWindow(size=(640,480))#, pos=(20,20))
+    points = None
     print """
     Demo Objrender:
         refresh()
         load_obj(): select a random object and load it
     """
 
-def load_obj(name='blueghost'):
+def fwd_cam():
+    cam = camera.kinect_camera()
+    cam.RT[:3,3] += [0, 0, 3.0]
+    return cam
+
+def load_obj(name='gamecube'):
     global obj, points, range_image, vol
 
     window.canvas.SetCurrent()
@@ -29,12 +35,9 @@ def load_obj(name='blueghost'):
     obj.RT[:3,3] = -obj.vertices[:,:3].mean(0)
 
     # Range image of the original points
-    cam = camera.kinect_camera()
-    cam.RT[:3,3] += [0, 0, 3.0]
-    range_image = obj.range_render(cam)
-    points = range_image.point_model(True)
-    
-    #range_image = obj.range_render(np.dot(camera.kinect_camera(), rp))
+    range_image = obj.range_render(fwd_cam())
+    range_image.compute_points()
+    points = range_image.point_model()
 
     vol = volume.Volume(N=128)
     vol.distance_transform_cuda(range_image)
@@ -64,7 +67,8 @@ def sample_solve():
     # but set the camera matrix to the estimate (previous frame)
     rimg = obj.range_render(windowcam)
     rimg.camera = prev_cam
-    rimg.point_model(True)
+    rimg.compute_points()
+    rimg.point_model()
 
     # Predict a frame by racasting the volume
     predict_img = vol.raycast_cuda(prev_cam)
@@ -105,7 +109,8 @@ def sample2():
 def sample():
     global range_image, points
     range_image = obj.range_render(windowcam)
-    points = range_image.point_model(True)
+    range_image.compute_points()
+    points = range_image.point_model()
     window.Refresh()
     vol.distance_transform_cuda(range_image)
 
@@ -113,7 +118,8 @@ def sample():
 def icp():
     global range_image, points
     range_image = obj.range_render(windowcam)
-    points = range_image.point_model(True)
+    range_image.compute_points()
+    points = range_image.point_model()
     
     window.Refresh()
     
@@ -156,7 +162,8 @@ def post_draw():
     # Points to draw
     glColor(0,1,0)
     glPointSize(4)
-    points.draw()
+    if points is not None:
+        points.draw()
     glColor(1,1,0)
 
     glLineWidth(2)
