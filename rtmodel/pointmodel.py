@@ -16,6 +16,7 @@ class PointModel(object):
            xyz: numpy array (n by 3)
         """
         self.xyz = xyz.astype('f') if xyz is not None else xyz
+        self.rgba = None
         self.normals = normals.astype('f') if normals is not None else normals
         self.RT = RT.astype('f') if RT is not None else RT
         self._initialized = False
@@ -56,7 +57,7 @@ class PointModel(object):
     def update_buffers(self):
         XYZ = self.xyz
         N = self.normals
-        RGBA = None
+        RGBA = self.rgba
 
         if XYZ is None: XYZ = np.zeros((0,3),'f')
         # TODO make this more elegant, coerce RGBA to match XYZ somehow
@@ -91,7 +92,7 @@ class PointModel(object):
         glPushMatrix()
         glMultMatrixf(self.RT.transpose())
 
-        RGBA = None
+        RGBA = self.rgba
         N = self.normals
         XYZ = self.xyz
 
