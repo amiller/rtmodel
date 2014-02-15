@@ -49,7 +49,6 @@ class PointModel(object):
 
     def __del__(self):
         if self._initialized:
-            print 'deleting', [self.rgbabuf, self.normalsbuf, self.xyzbuf]
             glDeleteBuffersARB(3, [self.rgbabuf, self.normalsbuf, self.xyzbuf])
             glDeleteTextures((self.rgbtex,))
 
